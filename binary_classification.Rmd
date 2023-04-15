@@ -1,0 +1,75 @@
+---
+title: "biostat626-midterm1"
+author: "Zejia Liu"
+date: "2023-04-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(glmnet)
+
+train_data <- read_table("training_data.txt")
+test_data <- read_table("test_data.txt")
+dim(train_data) 
+dim(test_data)  
+```
+
+
+```{r}
+# Load required libraries
+library(glmnet) # for LASSO
+library(caret)  # for confusion matrix
+
+# Print the dimensions of the data
+cat("Training data dimensions:", dim(train_data), "\n")
+cat("Test data dimensions:", dim(test_data), "\n")
+
+# Create binary outcome variable for static vs dynamic activity
+train_data$activity_type <- ifelse(train_data$activity %in% c(1, 2, 3), 1, 0)
+
+# Set up LASSO logistic regression with cross-validation to find best lambda
+lasso_y <- train_data$activity_type
+lasso_x <- data.matrix(train_data[, -c(1, 2, 564)]) # exclude activity and subject ID columns
+cv_model <- cv.glmnet(lasso_x, lasso_y, alpha = 1)
+best_lambda <- cv_model$lambda.min
+cat("Best lambda value:", best_lambda, "\n")
+
+# Train final LASSO model with best lambda
+best_model <- glmnet(lasso_x, lasso_y, alpha = 1, lambda = best_lambda)
+
+# Predict outcomes on the training data
+y_predicted_train <- predict(best_model, s = best_lambda, newx = lasso_x)
+predicted_classes_train <- ifelse(y_predicted_train > 0.56, 1, 0)
+
+# Print the training accuracy
+train_accuracy <- mean(predicted_classes_train == train_data$activity_type)
+cat("Training accuracy:", train_accuracy, "\n")
+
+# Create confusion matrix for training data
+cm_table_train <- confusionMatrix(data = as.factor(predicted_classes_train), 
+                                  reference = as.factor(train_data$activity_type))$table
+
+# Print the confusion matrix
+cat("Confusion matrix for training data:\n")
+print(cm_table_train)
+
+# Set up test data for predictions
+test_lasso_x <- data.matrix(test_data[, -c(1)]) # exclude subject ID column
+
+# Predict outcomes on the test data
+y_predicted_test <- predict(best_model, s = best_lambda, newx = test_lasso_x)
+predicted_classes_test <- ifelse(y_predicted_test > 0.52, 1, 0)
+
+# Output the final results using LASSO
+write.table(predicted_classes_test, "binary.txt", 
+            row.names = FALSE, col.names = FALSE)
+
+
+
+```
+
